@@ -1,23 +1,41 @@
 
-#define Pump 1
-#define MotorMixA 2
-#define MotorMixB 3
-#define MotorMixCampuran 7
-#define ValveMixA 4
-#define ValveMixB 5
-#define VTCampuran 8
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
+#define OLED_ADDR   0x3C
+Adafruit_SSD1306 display(-1);
+
+#define encoder0PinA  2
+#define encoder0PinB  3
+
+#define encoder0PinA  2
+#define encoder0PinB  3
+
+/* Switch Sensor */
+#define sw_airbaku  A1
+#define sw_mixLow  A2
+#define sw_mixHigh  A3
+#define sw_A  A4
+#define sw_B  A5
+
+#define Pump 12
+#define MotorMixA 11
+#define MotorMixB 10
+#define MotorMixCampuran 9
+#define ValveMixA 7
+#define ValveMixB 6
+#define ValveOut 5
+#define SensorFlowA  2
+#define SensorFlowB  3
 
 
 #define ON  1
 #define OFF 2
 
-int interval = 1000;
-int vTandonUtama = 0;
-int vTandonCampuran = 0;
 int flowMixA = 0;
 int flowMixB = 0;
-float konstanta = 4.5;
 
+bool State = true;
 bool ProsesMixing = false;
 bool IsiTandonCampuran = false;
 bool PenambahanABmix = false;
@@ -28,107 +46,133 @@ bool BacaSensor = true;
 bool PupukA = false;
 bool PupukB = false;
 
+unsigned long ltime = millis();
+unsigned long ltime1 = millis();
+unsigned long VolumeA = 0;
+unsigned long VolumeB = 0;
+
+int clk;
+int CursorPos = 0;
+bool state = false;
+
+
+byte menuCount = 0;
+byte ppmCount = 0;
+byte pulse = 0;
+
 /* trial */
 String SerialData;
 String Data[10];
 String SplitData;
 int StringData;
 
+/** SAVE EEPROM **/
+bool Start = false;
+bool Setting = false;
+int PPM = 0;
+
 struct SensorFlow {
   int Count;
-  int Calc;
 } FlowA, FlowB;
 
 
 void BacaSensorTandonUtama() {
-  // vTandonUtama = analogRead(16);
-  vTandonUtama = Data[0].toInt();
-  if (vTandonUtama < 200) {
+  if (digitalRead(sw_airbaku) == HIGH) {
     ProsesMixing = true;
     IsiTandonCampuran = true;
     BacaSensor = false;
   }
 }
 
-bool WaterLvlTandonCampuran() {
-  // vTandonCampuran = analogRead(17);
-  vTandonCampuran = Data[1].toInt();
-  if (vTandonCampuran > 5000) {
-    return false;
-  } else {
-    return true;
-  }
-}
 
 void Pompa(int Status) {
   if (Status == ON) {
-    digitalWrite(Pump, HIGH);
-  } else {
     digitalWrite(Pump, LOW);
+  } else {
+    digitalWrite(Pump, HIGH);
   }
 }
 
 void MotorMix(int Type, int Status) {
   if (Status == ON) {
-    digitalWrite(Type, HIGH);
-  } else {
     digitalWrite(Type, LOW);
+  } else {
+    digitalWrite(Type, HIGH);
   }
 }
-
-int FlowMeterA() {
-  unsigned long ltime = millis();
-  unsigned long Volume = 0;
-  if ((millis() - ltime) >= interval) {
-    detachInterrupt(0);
-    float debit = float((interval / (millis() - ltime)) *  FlowA.Count) / konstanta;
-    ltime = millis();
-    int flowmlt = (debit / 60.0) * interval;
-    Volume += flowmlt;
-    FlowA.Count = 0;
-    attachInterrupt(00, pulseCounterA, RISING);
-    return Volume;
-  }
-}
-
-int FlowMeterB() {
-  unsigned long ltime = millis();
-  unsigned long Volume = 0;
-  if ((millis() - ltime) >= interval) {
-    detachInterrupt(0);
-    float debit = float((interval / (millis() - ltime)) *  FlowB.Count) / konstanta;
-    ltime = millis();
-    int flowmlt = (debit / 60.0) * interval;
-    Volume += flowmlt;
-    FlowB.Count = 0;
-    attachInterrupt(00, pulseCounterB, RISING);
-    return Volume;
-  }
-}
-
 
 
 void setup() {
+  Wire.begin();
   Serial.begin(9600);
-  attachInterrupt(00, pulseCounterA, RISING);
-  attachInterrupt(00, pulseCounterB, RISING);
+  display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  display.display();
+  display.clearDisplay();
+
+  /* Switch */
+  pinMode(sw_airbaku, INPUT);
+  pinMode(sw_mixLow, INPUT);
+  pinMode(sw_mixHigh, INPUT);
+  pinMode(sw_A, INPUT);
+  pinMode(sw_B, INPUT);
+  pinMode(4, INPUT_PULLUP);
+
+  /* Motor and Valve */
+  pinMode(Pump, OUTPUT);
+  pinMode(MotorMixCampuran, OUTPUT);
+  pinMode(MotorMixA, OUTPUT);
+  pinMode(MotorMixB, OUTPUT);
+  pinMode(ValveMixA, OUTPUT);
+  pinMode(ValveMixB, OUTPUT);
+  pinMode(ValveOut, OUTPUT);
+
+  digitalWrite(Pump, HIGH);
+  digitalWrite(MotorMixA, HIGH);
+  digitalWrite(MotorMixB, HIGH);
+  digitalWrite(ValveMixA, HIGH);
+  digitalWrite(ValveMixB, HIGH);
+  digitalWrite(ValveOut, HIGH);
+  digitalWrite(MotorMixCampuran, HIGH);
+
+  pinMode(SensorFlowA, INPUT);
+  pinMode(SensorFlowB, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(SensorFlowA), pulseCounterA, RISING);
+  attachInterrupt(digitalPinToInterrupt(SensorFlowB), pulseCounterB, RISING);
+  attachInterrupt(digitalPinToInterrupt(encoder0PinA), doEncoder, CHANGE);
 }
 
 
 void loop() {
-  debug();
+  setting();
+  MainLoop();
+}
+
+void setting() {
+  if (digitalRead(4) == LOW) {
+    Start = false;
+    Setting = true;
+  }
+  while (Setting) {
+    menuCheck();
+    staticMenu();
+  }
+}
+
+
+void MainLoop() {
   if (BacaSensor) {
+    showPhrase("STAND BY");
     BacaSensorTandonUtama();
   }
-  if (ProsesMixing) {
-
+  while (ProsesMixing && Start) {
     /******* Isi Air Tandon Campuran ******/
+    showPhrase("ISI AIR BAKU");
     if (IsiTandonCampuran) {
-      if (WaterLvlTandonCampuran()) {
+      if (digitalRead(sw_mixHigh) == HIGH) {
         Pompa(ON);
         MotorMix(MotorMixA, ON);
         MotorMix(MotorMixB, ON);
-        Serial.println("Isi Air");
       } else {
         Pompa(OFF);
         MotorMix(MotorMixA, OFF);
@@ -136,24 +180,39 @@ void loop() {
         IsiTandonCampuran = false;
         PenambahanABmix = true;
         PupukA = true;
-        Serial.println("Air Full");
+        ResetFlow();
       }
     }
 
     /******* Proses Penambahan Pupuk ABmix ******/
-    else if (PenambahanABmix) {
+    while (PenambahanABmix) {
+      readFlow();
       if (PupukA) {
-        Serial.println("ISI PUPUk");
-        digitalWrite(ValveMixA, HIGH);
-        if (FlowMeterA() >= 500) {
-          digitalWrite(ValveMixA, LOW);
+        showPhrase("Nutrisi A");
+        digitalWrite(ValveMixA, LOW);
+        while (State) {
+          ResetFlow();
+          delay(500);
+          State = false;
+        }
+        if (FlowA.Count >= 178) {
+          digitalWrite(ValveMixA, HIGH);  // 500 ml
+          delay(500);
+          State = true;
           PupukA = false;
           PupukB = true;
         }
       } else if (PupukB) {
-        digitalWrite(ValveMixB, HIGH);
-        if (FlowMeterA() >= 500) {
-          digitalWrite(ValveMixB, LOW);
+        showPhrase("Nutrisi B");
+        digitalWrite(ValveMixB, LOW);
+        while (State) {
+          ResetFlow();
+          delay(1000);
+          State = false;
+        }
+        if (FlowB.Count >= 178) {
+          digitalWrite(ValveMixB, HIGH); // 500 ml
+          delay(1000);
           PupukB = false;
           Mixing = true;
           PenambahanABmix = false;
@@ -162,24 +221,36 @@ void loop() {
     }
 
     /******* Proses Mixing tandon Campuran ******/
-    else if (Mixing) {
+    while (Mixing) {
+      showPhrase("MIXING");
       MotorMix(MotorMixCampuran, ON);
-      delay(50000);
+      delay(20000);
       MotorMix(MotorMixCampuran, OFF);
+      delay(100);
+      State = true;
       Mixing = false;
       Distribusi = true;
     }
 
     /******* Proses Distribusi Pupuk ******/
-    else if (Distribusi) {
-      digitalWrite(VTCampuran, HIGH);
-      if (!WaterLvlTandonCampuran()) {
-        digitalWrite(VTCampuran, LOW);
+    while (Distribusi) {
+      showPhrase("PENGELUARAN");
+      digitalWrite(ValveOut, LOW);
+      if (digitalRead(sw_mixLow) == HIGH) {
+        digitalWrite(ValveOut, HIGH);
+        delay(500);
+        Serial.print("Selesai");
+        Distribusi = false;
         ProsesMixing = false;
         BacaSensor = true;
       }
     }
   }
+}
+
+void ResetFlow() {
+  FlowA.Count = 0;
+  FlowB.Count = 0;
 }
 
 void pulseCounterA() {
@@ -188,4 +259,35 @@ void pulseCounterA() {
 
 void pulseCounterB() {
   FlowB.Count++;
+}
+
+void doEncoder() {
+  if (digitalRead(encoder0PinA) == HIGH) {
+    if (digitalRead(encoder0PinB) == LOW && ppmCount > 0) {
+      ppmCount--;
+      menuCount--;
+      pulse--;
+    }
+    else {
+      ppmCount++;
+      menuCount++;
+      pulse++;
+    }
+  }
+  else
+  {
+    if (digitalRead(encoder0PinB) == LOW ) {
+      ppmCount++;
+      menuCount++;
+      pulse++;
+    }
+    else {
+      if (ppmCount > 0) {
+        ppmCount--;
+        menuCount--;
+        pulse--;
+      }
+
+    }
+  }
 }

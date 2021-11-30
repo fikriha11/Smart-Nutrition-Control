@@ -27,3 +27,23 @@ String GetData(String data, char Spliter, int Number) {
   }
   return SplitData;
 }
+
+
+void ReadSwitch() {
+  Serial.print("Air Baku: ");
+  Serial.print(digitalRead(sw_airbaku));
+  Serial.print('\t');
+  Serial.print("Mix Low: ");
+  Serial.print(digitalRead(sw_mixLow));
+  Serial.print('\t');
+  Serial.print("Mix High: ");
+  Serial.println(digitalRead(sw_mixHigh));
+}
+
+void readFlow() {
+  Serial.print("A: ");
+  Serial.print(FlowA.Count);
+  Serial.print('\t');
+  Serial.print("B: ");
+  Serial.println(FlowB.Count);
+}
