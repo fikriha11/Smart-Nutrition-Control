@@ -1,42 +1,60 @@
 void menuCheck() {
-
+  attachInterrupt(digitalPinToInterrupt(encoder0PinA), doEncoder, CHANGE);
   if (menuCount < 8 ) {
     CursorPos = 0;
     if (digitalRead(4) == LOW) {
-      delay(300);
+      Button = true;
+    }
+    if (digitalRead(4) == HIGH && Button) {
       state = true;
+      Button = false;
+      ppmCount = EEPROM.read(addrPPM);
       while (state) {
+        MappingPPM();
         displayPPM();
-        PPM = map(ppmCount, 0, 254, 0, 1000);
         if (digitalRead(4) == LOW) {
+          Button = true;
+        }
+        if (digitalRead(4) == HIGH && Button) {
+          EEPROM.write(addrPPM, ppmCount);
           menuCount = 10;
           state = false;
+          Button = false;
           break;
         }
       }
     }
   }
 
-  if (menuCount > 8) {
+  else if (menuCount > 8) {
     CursorPos = 10;
     if (digitalRead(4) == LOW) {
-      delay(1000);
+      Button = true;
+    }
+    if (digitalRead(4) == HIGH && Button) {
       state = true;
+      Button = false;
       while (state) {
         displayRunning();
         menuCount = 0;
         state = false;
         Start = true;
         Setting = false;
-        break;
+        detachInterrupt(digitalPinToInterrupt(encoder0PinA));
       }
     }
   }
 
-  if (menuCount > 20) {
+  else if (menuCount > 10) {
     menuCount = 0;
   }
 }
+
+int MappingPPM() {
+  int PPM = map(ppmCount, 0, 254, 0, 1000);
+  return PPM;
+}
+
 
 
 void staticMenu() {
@@ -66,7 +84,24 @@ void displayPPM() {
   display.setCursor(10, 10);
   display.println("PPM: ");
   display.setCursor(40, 10);
-  display.println(PPM);
+  display.println(MappingPPM());
+  display.display();
+  display.clearDisplay();
+  delay(50);
+}
+
+void ppmSetting() {
+  ppmCount = EEPROM.read(addrPPM);
+  display.setTextColor(WHITE);
+  display.setTextSize(1.7);
+
+  display.setCursor(35, 5);
+  display.println("STAND BY");
+
+  display.setCursor(22, 20);
+  display.println("SET PPM : ");
+  display.setCursor(80, 20);
+  display.println(MappingPPM());
   display.display();
   display.clearDisplay();
   delay(50);
@@ -76,7 +111,7 @@ void displayPPM() {
 void displayRunning() {
   display.setTextColor(WHITE);
   display.setTextSize(1);
-  display.setCursor(40, 10);
+  display.setCursor(30, 10);
   display.println("RUNNING IN");
   display.display();
   display.clearDisplay();
@@ -84,7 +119,7 @@ void displayRunning() {
   for (int i = 5 ; i > 0; i--) {
     display.setTextColor(WHITE);
     display.setTextSize(3);
-    display.setCursor(60, 8);
+    display.setCursor(55, 5);
     display.println(i);
     display.display();
     display.clearDisplay();
@@ -93,11 +128,12 @@ void displayRunning() {
 }
 
 
-void showPhrase(String phrase) {
+void showPhrase(String phrase, int col, int row) {
   display.setTextColor(WHITE);
   display.setTextSize(1);
-  display.setCursor(40, 10);
+  display.setCursor(col, row);
   display.println(phrase);
   display.display();
   display.clearDisplay();
+  delay(100);
 }

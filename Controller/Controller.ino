@@ -1,15 +1,13 @@
 
 #include <Wire.h>
+#include <EEPROM.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
 #define OLED_ADDR   0x3C
 Adafruit_SSD1306 display(-1);
 
-#define encoder0PinA  2
-#define encoder0PinB  3
-
-#define encoder0PinA  2
-#define encoder0PinB  3
+#define encoder0PinA  19
+#define encoder0PinB  18
 
 /* Switch Sensor */
 #define sw_airbaku  A1
@@ -46,14 +44,9 @@ bool BacaSensor = true;
 bool PupukA = false;
 bool PupukB = false;
 
-unsigned long ltime = millis();
-unsigned long ltime1 = millis();
-unsigned long VolumeA = 0;
-unsigned long VolumeB = 0;
-
-int clk;
 int CursorPos = 0;
 bool state = false;
+bool Button = false;
 
 
 byte menuCount = 0;
@@ -67,9 +60,12 @@ String SplitData;
 int StringData;
 
 /** SAVE EEPROM **/
-bool Start = false;
+bool Start = true;
 bool Setting = false;
-int PPM = 0;
+
+/* Address */
+int addrPPM = 0;
+
 
 struct SensorFlow {
   int Count;
@@ -106,9 +102,8 @@ void setup() {
   Wire.begin();
   Serial.begin(9600);
   display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
-  display.display();
-  display.clearDisplay();
-
+  ppmCount = EEPROM.read(addrPPM);
+  
   /* Switch */
   pinMode(sw_airbaku, INPUT);
   pinMode(sw_mixLow, INPUT);
@@ -139,7 +134,15 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(SensorFlowA), pulseCounterA, RISING);
   attachInterrupt(digitalPinToInterrupt(SensorFlowB), pulseCounterB, RISING);
-  attachInterrupt(digitalPinToInterrupt(encoder0PinA), doEncoder, CHANGE);
+  
+  display.clearDisplay();
+  display.setTextSize(1.7);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.println("AN-MIX");
+  display.print("Menyiapkan...");
+  display.display();
+  delay(5000);
 }
 
 
@@ -150,33 +153,41 @@ void loop() {
 
 void setting() {
   if (digitalRead(4) == LOW) {
+    Button = true;
+  } if (digitalRead(4) == HIGH && Button) {
     Start = false;
     Setting = true;
+    Button = false;
   }
   while (Setting) {
-    menuCheck();
     staticMenu();
+    menuCheck();
   }
 }
 
 
 void MainLoop() {
-  if (BacaSensor) {
-    showPhrase("STAND BY");
+  if (BacaSensor  && Start) {
+    ppmSetting();
+    Serial.println("STAND BY");
     BacaSensorTandonUtama();
   }
-  while (ProsesMixing && Start) {
+  while (ProsesMixing) {
     /******* Isi Air Tandon Campuran ******/
-    showPhrase("ISI AIR BAKU");
+    showPhrase("ISI AIR BAKU", 25, 10);
+    Serial.println("ISI AIR BAKU");
     if (IsiTandonCampuran) {
       if (digitalRead(sw_mixHigh) == HIGH) {
+        delay(500);
         Pompa(ON);
         MotorMix(MotorMixA, ON);
         MotorMix(MotorMixB, ON);
       } else {
+        delay(500);
         Pompa(OFF);
         MotorMix(MotorMixA, OFF);
         MotorMix(MotorMixB, OFF);
+        delay(2000);
         IsiTandonCampuran = false;
         PenambahanABmix = true;
         PupukA = true;
@@ -187,30 +198,23 @@ void MainLoop() {
     /******* Proses Penambahan Pupuk ABmix ******/
     while (PenambahanABmix) {
       readFlow();
+      int target = EEPROM.read(addrPPM);
       if (PupukA) {
-        showPhrase("Nutrisi A");
+        showPhrase("TAMBAH NUTRISI A", 19, 10);
+        Serial.println("Nutrisi A");
         digitalWrite(ValveMixA, LOW);
-        while (State) {
-          ResetFlow();
-          delay(500);
-          State = false;
-        }
-        if (FlowA.Count >= 178) {
+        if (FlowA.Count >= target) {
           digitalWrite(ValveMixA, HIGH);  // 500 ml
-          delay(500);
+          delay(1000);
           State = true;
           PupukA = false;
           PupukB = true;
         }
       } else if (PupukB) {
-        showPhrase("Nutrisi B");
+        showPhrase("TAMBAH NUTRISI B", 19, 10);
+        Serial.println("Nutrisi B");
         digitalWrite(ValveMixB, LOW);
-        while (State) {
-          ResetFlow();
-          delay(1000);
-          State = false;
-        }
-        if (FlowB.Count >= 178) {
+        if (FlowB.Count >= target) {
           digitalWrite(ValveMixB, HIGH); // 500 ml
           delay(1000);
           PupukB = false;
@@ -222,11 +226,12 @@ void MainLoop() {
 
     /******* Proses Mixing tandon Campuran ******/
     while (Mixing) {
-      showPhrase("MIXING");
+      showPhrase("PENGADUKAN", 33, 10);
+      Serial.println("MIXING");
       MotorMix(MotorMixCampuran, ON);
-      delay(20000);
+      delay(10000);
       MotorMix(MotorMixCampuran, OFF);
-      delay(100);
+      delay(2000);
       State = true;
       Mixing = false;
       Distribusi = true;
@@ -234,11 +239,12 @@ void MainLoop() {
 
     /******* Proses Distribusi Pupuk ******/
     while (Distribusi) {
-      showPhrase("PENGELUARAN");
+      showPhrase("PENGELUARAN", 33, 10);
+      Serial.println("PENGELUARAN");
       digitalWrite(ValveOut, LOW);
       if (digitalRead(sw_mixLow) == HIGH) {
         digitalWrite(ValveOut, HIGH);
-        delay(500);
+        delay(1000);
         Serial.print("Selesai");
         Distribusi = false;
         ProsesMixing = false;
