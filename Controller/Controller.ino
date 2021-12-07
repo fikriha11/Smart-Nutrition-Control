@@ -103,7 +103,7 @@ void setup() {
   Serial.begin(9600);
   display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
   ppmCount = EEPROM.read(addrPPM);
-  
+
   /* Switch */
   pinMode(sw_airbaku, INPUT);
   pinMode(sw_mixLow, INPUT);
@@ -134,7 +134,7 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(SensorFlowA), pulseCounterA, RISING);
   attachInterrupt(digitalPinToInterrupt(SensorFlowB), pulseCounterB, RISING);
-  
+
   display.clearDisplay();
   display.setTextSize(1.7);
   display.setTextColor(WHITE);
@@ -229,7 +229,7 @@ void MainLoop() {
       showPhrase("PENGADUKAN", 33, 10);
       Serial.println("MIXING");
       MotorMix(MotorMixCampuran, ON);
-      delay(10000);
+      delay(20000);
       MotorMix(MotorMixCampuran, OFF);
       delay(2000);
       State = true;
@@ -243,8 +243,8 @@ void MainLoop() {
       Serial.println("PENGELUARAN");
       digitalWrite(ValveOut, LOW);
       if (digitalRead(sw_mixLow) == HIGH) {
+        delay(30000);
         digitalWrite(ValveOut, HIGH);
-        delay(1000);
         Serial.print("Selesai");
         Distribusi = false;
         ProsesMixing = false;
