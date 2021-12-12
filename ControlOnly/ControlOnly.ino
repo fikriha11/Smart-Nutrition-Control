@@ -1,5 +1,3 @@
-
-#include <avr/wdt.h>
 #include <Wire.h>
 #include <EEPROM.h>
 #include <Adafruit_SSD1306.h>
@@ -9,6 +7,7 @@ Adafruit_SSD1306 display(-1);
 
 #define encoder0PinA  19
 #define encoder0PinB  18
+#define SwitchBtn 17
 
 /* Switch Sensor */
 #define sw_airbaku  A1
@@ -53,7 +52,6 @@ bool Button = false;
 byte menuCount = 0;
 byte ppmCount = 0;
 byte pulse = 0;
-int Step = 0;
 
 /* trial */
 String SerialData;
@@ -61,19 +59,26 @@ String Data[10];
 String SplitData;
 int StringData;
 
+/** SAVE EEPROM **/
 bool Start = true;
 bool Setting = false;
 
-/** SAVE EEPROM **/
+/* Address */
 int addrPPM = 0;
-int addrStep = 0;
-int addrFlowA = 0;
-int addrFlowB = 0;
+
 
 struct SensorFlow {
   int Count;
 } FlowA, FlowB;
 
+
+void BacaSensorTandonUtama() {
+  if (digitalRead(sw_airbaku) == HIGH) {
+    ProsesMixing = true;
+    IsiTandonCampuran = true;
+    BacaSensor = false;
+  }
+}
 
 
 void Pompa(int Status) {
@@ -97,12 +102,7 @@ void setup() {
   Wire.begin();
   Serial.begin(9600);
   display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
-
-  /* Read EEPROM */
   ppmCount = EEPROM.read(addrPPM);
-  // Step = EEPROM.read(addrStep);
-  // FlowA.Count = EEPROM.read(addrFlowA);
-  // FlowB.Count = EEPROM.read(addrFlowB);
 
   /* Switch */
   pinMode(sw_airbaku, INPUT);
@@ -110,7 +110,7 @@ void setup() {
   pinMode(sw_mixHigh, INPUT);
   pinMode(sw_A, INPUT);
   pinMode(sw_B, INPUT);
-  pinMode(4, INPUT_PULLUP);
+  pinMode(SwitchBtn, INPUT_PULLUP);
 
   /* Motor and Valve */
   pinMode(Pump, OUTPUT);
@@ -132,7 +132,7 @@ void setup() {
   pinMode(SensorFlowA, INPUT);
   pinMode(SensorFlowB, INPUT);
 
-
+  attachInterrupt(digitalPinToInterrupt(SensorFlowA), pulseCounterA, RISING);
   attachInterrupt(digitalPinToInterrupt(SensorFlowB), pulseCounterB, RISING);
 
   display.clearDisplay();
@@ -143,25 +143,107 @@ void setup() {
   display.print("Menyiapkan...");
   display.display();
   delay(5000);
-  // wdt_enable(WDTO_4S);
 }
 
 
 void loop() {
-  // ReadSwitch();
-  CtrlStep();
+  setting();
+  MainLoop();
 }
 
 void setting() {
-  if (digitalRead(4) == LOW) {
+  if (digitalRead(SwitchBtn) == LOW) {
     Button = true;
-  } if (digitalRead(4) == HIGH && Button) {
+  } if (digitalRead(SwitchBtn) == HIGH && Button) {
+    Start = false;
     Setting = true;
     Button = false;
   }
   while (Setting) {
     staticMenu();
     menuCheck();
+  }
+}
+
+
+void MainLoop() {
+  if (BacaSensor  && Start) {
+    ppmSetting();
+    Serial.println("STAND BY");
+    BacaSensorTandonUtama();
+  }
+  while (ProsesMixing) {
+    /******* Isi Air Tandon Campuran ******/
+    showPhrase("ISI AIR BAKU", 25, 10);
+    Serial.println("ISI AIR BAKU");
+    if (IsiTandonCampuran) {
+      if (digitalRead(sw_mixHigh) == HIGH) {
+        delay(500);
+        Pompa(ON);
+        MotorMix(MotorMixA, ON);
+        MotorMix(MotorMixB, ON);
+      } else {
+        delay(500);
+        Pompa(OFF);
+        MotorMix(MotorMixA, OFF);
+        MotorMix(MotorMixB, OFF);
+        delay(2000);
+        IsiTandonCampuran = false;
+        PenambahanABmix = true;
+        PupukA = true;
+        ResetFlow();
+      }
+    }
+
+    /******* Proses Penambahan Pupuk ABmix ******/
+    while (PenambahanABmix) {
+      readFlow();
+      int target = EEPROM.read(addrPPM);
+      if (PupukA) {
+        showPhrase("TAMBAH NUTRISI AB", 19, 10);
+        Serial.println("Nutrisi A");
+        digitalWrite(ValveMixA, LOW);
+        digitalWrite(ValveMixB, LOW);
+        if (FlowA.Count >= target) {
+          digitalWrite(ValveMixA, HIGH);
+          digitalWrite(ValveMixB, HIGH);
+          delay(3000);
+          State = true;
+          PupukA = false;
+          PupukB = false;
+          Mixing = true;
+          PenambahanABmix = false;
+        }
+      }
+    }
+
+    /******* Proses Mixing tandon Campuran ******/
+    while (Mixing) {
+      showPhrase("PENGADUKAN", 33, 10);
+      Serial.println("MIXING");
+      MotorMix(MotorMixCampuran, ON);
+      delay(60000);
+      MotorMix(MotorMixCampuran, OFF);
+      delay(2000);
+      State = true;
+      Mixing = false;
+      Distribusi = true;
+    }
+
+    /******* Proses Distribusi Pupuk ******/
+    while (Distribusi) {
+      showPhrase("PENGELUARAN", 33, 10);
+      ReadSwitch();
+      digitalWrite(ValveOut, LOW);
+      if (digitalRead(sw_mixLow) == HIGH) {
+        delay(180000);
+        digitalWrite(ValveOut, HIGH);
+        showPhrase("PENGELUARAN", 33, 10);
+        Distribusi = false;
+        ProsesMixing = false;
+        BacaSensor = true;
+      }
+    }
   }
 }
 
