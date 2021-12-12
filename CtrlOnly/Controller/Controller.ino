@@ -8,6 +8,7 @@ Adafruit_SSD1306 display(-1);
 
 #define encoder0PinA  19
 #define encoder0PinB  18
+#define SwitchBtn 17
 
 /* Switch Sensor */
 #define sw_airbaku  A1
@@ -110,7 +111,7 @@ void setup() {
   pinMode(sw_mixHigh, INPUT);
   pinMode(sw_A, INPUT);
   pinMode(sw_B, INPUT);
-  pinMode(4, INPUT_PULLUP);
+  pinMode(SwitchBtn, INPUT_PULLUP);
 
   /* Motor and Valve */
   pinMode(Pump, OUTPUT);
@@ -152,9 +153,9 @@ void loop() {
 }
 
 void setting() {
-  if (digitalRead(4) == LOW) {
+  if (digitalRead(SwitchBtn) == LOW) {
     Button = true;
-  } if (digitalRead(4) == HIGH && Button) {
+  } if (digitalRead(SwitchBtn) == HIGH && Button) {
     Start = false;
     Setting = true;
     Button = false;
@@ -200,23 +201,16 @@ void MainLoop() {
       readFlow();
       int target = EEPROM.read(addrPPM);
       if (PupukA) {
-        showPhrase("TAMBAH NUTRISI A", 19, 10);
+        showPhrase("TAMBAH NUTRISI AB", 19, 10);
         Serial.println("Nutrisi A");
         digitalWrite(ValveMixA, LOW);
+        digitalWrite(ValveMixB, LOW);
         if (FlowA.Count >= target) {
-          digitalWrite(ValveMixA, HIGH);  // 500 ml
-          delay(1000);
+          digitalWrite(ValveMixA, HIGH);
+          digitalWrite(ValveMixB, HIGH);
+          delay(3000);
           State = true;
           PupukA = false;
-          PupukB = true;
-        }
-      } else if (PupukB) {
-        showPhrase("TAMBAH NUTRISI B", 19, 10);
-        Serial.println("Nutrisi B");
-        digitalWrite(ValveMixB, LOW);
-        if (FlowB.Count >= target) {
-          digitalWrite(ValveMixB, HIGH); // 500 ml
-          delay(1000);
           PupukB = false;
           Mixing = true;
           PenambahanABmix = false;
@@ -229,7 +223,7 @@ void MainLoop() {
       showPhrase("PENGADUKAN", 33, 10);
       Serial.println("MIXING");
       MotorMix(MotorMixCampuran, ON);
-      delay(20000);
+      delay(60000);
       MotorMix(MotorMixCampuran, OFF);
       delay(2000);
       State = true;
@@ -240,12 +234,12 @@ void MainLoop() {
     /******* Proses Distribusi Pupuk ******/
     while (Distribusi) {
       showPhrase("PENGELUARAN", 33, 10);
-      Serial.println("PENGELUARAN");
+      ReadSwitch();
       digitalWrite(ValveOut, LOW);
       if (digitalRead(sw_mixLow) == HIGH) {
-        delay(30000);
+        delay(180000);
         digitalWrite(ValveOut, HIGH);
-        Serial.print("Selesai");
+        showPhrase("PENGELUARAN", 33, 10);
         Distribusi = false;
         ProsesMixing = false;
         BacaSensor = true;
