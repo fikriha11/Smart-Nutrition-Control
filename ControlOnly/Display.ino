@@ -1,5 +1,7 @@
 void menuCheck() {
   attachInterrupt(digitalPinToInterrupt(encoder0PinA), doEncoder, CHANGE);
+
+  /** Setting PPM **/
   if (menuCount < 8 ) {
     CursorPos = 0;
     if (digitalRead(SwitchBtn) == LOW) {
@@ -26,7 +28,8 @@ void menuCheck() {
     }
   }
 
-  else if (menuCount > 8) {
+  /** START **/
+  else if (menuCount > 8 && menuCount < 16) {
     CursorPos = 10;
     if (digitalRead(SwitchBtn) == LOW) {
       Button = true;
@@ -45,16 +48,84 @@ void menuCheck() {
     }
   }
 
-  else if (menuCount > 10) {
+  /** BUKA VALVE MANUAL **/
+  else if (menuCount >= 16) {
+    CursorPos = 20;
+    if (digitalRead(SwitchBtn) == LOW) {
+      Button = true;
+    } if (digitalRead(SwitchBtn) == HIGH && Button) {
+      state = true;
+      Button = false;
+      Mixing = true;
+      while (state) {
+        manual();
+        menuCount = 0;
+        state = false;
+        Start = true;
+        Setting = false;
+        detachInterrupt(digitalPinToInterrupt(encoder0PinA));
+      }
+    }
+  }
+
+  /** START MIXING SEMI AUTO **/
+  else if (menuCount >= 24) {
+    CursorPos = 30;
+    if (digitalRead(SwitchBtn) == LOW) {
+      Button = true;
+    } if (digitalRead(SwitchBtn) == HIGH && Button ) {
+      State = true;
+      Button = false;
+      ProsesMixing = true;
+      IsiTandonCampuran = true;
+      BacaSensor = false;
+      while (state) {
+        displayRunning();
+        menuCount = 0;
+        state = false;
+        Start = true;
+        Setting = false;
+        detachInterrupt(digitalPinToInterrupt(encoder0PinA));
+      }
+    }
+  }
+
+  else if (menuCount > 32) {
     menuCount = 0;
   }
 }
 
 int MappingPPM() {
-  int PPM = map(ppmCount, 0, 254, 0, 1000);
+  int PPM = map(ppmCount, 0, 287, 0, 1000); // max 500 ml (ppm 1000)
   return PPM;
 }
 
+void manual() {
+  while (Mixing) {
+    showPhrase("PENGADUKAN", 33, 10);
+    MotorMix(MotorMixCampuran, ON);
+    delay(60000);
+    MotorMix(MotorMixCampuran, OFF);
+    delay(2000);
+    State = true;
+    Mixing = false;
+    Distribusi = true;
+  }
+
+  /******* Proses Distribusi Pupuk ******/
+  while (Distribusi) {
+    showPhrase("PENGELUARAN", 33, 10);
+    digitalWrite(ValveOut, LOW);
+    if (digitalRead(sw_mixLow) == HIGH) {
+      delay(480000);
+      digitalWrite(ValveOut, HIGH);
+      showPhrase("PENGELUARAN", 33, 10);
+      Distribusi = false;
+      ProsesMixing = false;
+      BacaSensor = true;
+    }
+  }
+}
 
 
 void staticMenu() {
@@ -67,7 +138,13 @@ void staticMenu() {
   display.println("SETTING");
 
   display.setCursor(10, 10);
-  display.println("START");
+  display.println("Start Auto ");
+
+  display.setCursor(10, 20);
+  display.println("Buka Valve");
+
+  display.setCursor(10, 30);
+  display.println("Start Manual ");
 
   display.setCursor(2, CursorPos);
   display.println(">");
@@ -96,7 +173,7 @@ void ppmSetting() {
   display.setTextSize(1.7);
   display.setCursor(35, 5);
   display.println("STAND BY");
-  
+
   display.setCursor(22, 20);
   display.println("SET PPM : ");
   display.setCursor(80, 20);

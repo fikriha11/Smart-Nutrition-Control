@@ -132,8 +132,8 @@ void setup() {
   pinMode(SensorFlowA, INPUT);
   pinMode(SensorFlowB, INPUT);
 
-  attachInterrupt(digitalPinToInterrupt(SensorFlowA), pulseCounterA, RISING);
-  attachInterrupt(digitalPinToInterrupt(SensorFlowB), pulseCounterB, RISING);
+  attachInterrupt(digitalPinToInterrupt(SensorFlowA), pulseCounterA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(SensorFlowB), pulseCounterB, CHANGE);
 
   display.clearDisplay();
   display.setTextSize(1.7);
@@ -169,13 +169,13 @@ void setting() {
 void MainLoop() {
   if (BacaSensor  && Start) {
     ppmSetting();
-    Serial.println("STAND BY");
+    // Serial.println("STAND BY");
     BacaSensorTandonUtama();
   }
   while (ProsesMixing) {
     /******* Isi Air Tandon Campuran ******/
     showPhrase("ISI AIR BAKU", 25, 10);
-    Serial.println("ISI AIR BAKU");
+    // Serial.println("ISI AIR BAKU");
     if (IsiTandonCampuran) {
       if (digitalRead(sw_mixHigh) == HIGH) {
         delay(500);
@@ -197,11 +197,11 @@ void MainLoop() {
 
     /******* Proses Penambahan Pupuk ABmix ******/
     while (PenambahanABmix) {
-      readFlow();
+      // readFlow();
       int target = EEPROM.read(addrPPM);
       if (PupukA) {
         showPhrase("TAMBAH NUTRISI AB", 19, 10);
-        Serial.println("Nutrisi A");
+        // Serial.println("Nutrisi A");
         digitalWrite(ValveMixA, LOW);
         digitalWrite(ValveMixB, LOW);
         if (FlowA.Count >= target) {
@@ -220,7 +220,7 @@ void MainLoop() {
     /******* Proses Mixing tandon Campuran ******/
     while (Mixing) {
       showPhrase("PENGADUKAN", 33, 10);
-      Serial.println("MIXING");
+      // Serial.println("MIXING");
       MotorMix(MotorMixCampuran, ON);
       delay(60000);
       MotorMix(MotorMixCampuran, OFF);
@@ -233,10 +233,10 @@ void MainLoop() {
     /******* Proses Distribusi Pupuk ******/
     while (Distribusi) {
       showPhrase("PENGELUARAN", 33, 10);
-      ReadSwitch();
+      // ReadSwitch();
       digitalWrite(ValveOut, LOW);
       if (digitalRead(sw_mixLow) == HIGH) {
-        delay(180000);
+        delay(480000);
         digitalWrite(ValveOut, HIGH);
         showPhrase("PENGELUARAN", 33, 10);
         Distribusi = false;
@@ -260,33 +260,52 @@ void pulseCounterB() {
   FlowB.Count++;
 }
 
-void doEncoder() {
-  if (digitalRead(encoder0PinA) == HIGH) {
-    if (digitalRead(encoder0PinB) == LOW && ppmCount > 0) {
-      ppmCount--;
-      menuCount--;
-      pulse--;
-    }
-    else {
-      ppmCount++;
-      menuCount++;
-      pulse++;
-    }
-  }
-  else
-  {
-    if (digitalRead(encoder0PinB) == LOW ) {
-      ppmCount++;
-      menuCount++;
-      pulse++;
-    }
-    else {
-      if (ppmCount > 0) {
-        ppmCount--;
-        menuCount--;
-        pulse--;
-      }
+//void doEncoder() {
+//  if (digitalRead(encoder0PinA) == HIGH) {
+//    if (digitalRead(encoder0PinB) == LOW && ppmCount > 0) {
+//      ppmCount--;
+//      menuCount--;
+//      pulse--;
+//    }
+//    else {
+//      ppmCount++;
+//      menuCount++;
+//      pulse++;
+//    }
+//  }
+//  else
+//  {
+//    if (digitalRead(encoder0PinB) == LOW ) {
+//      ppmCount++;
+//      menuCount++;
+//      pulse++;
+//    }
+//    else {
+//      if (ppmCount > 0) {
+//        ppmCount--;
+//        menuCount--;
+//        pulse--;
+//      }
+//
+//    }
+//  }
+//}
 
-    }
+/** Versi 2 **/
+void doEncoder() {
+  if (digitalRead(encoder0PinA) == digitalRead(encoder0PinB)) {
+    ppmCount++;
+    menuCount++;
+    pulse++;
+  } else {
+    ppmCount--;
+    menuCount--;
+    pulse--;
+  }
+
+  if (ppmCount < 0) {
+    ppmCount = menuCount = pulse = 0;
+  } if (ppmCount > 287) {
+    ppmCount = 287;
   }
 }
